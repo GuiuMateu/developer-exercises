@@ -25,7 +25,20 @@ pub struct CreatePostInput {
 
 #[hdk_extern]
 pub fn create_post(external_data: CreatePostInput) -> ExternResult<EntryHash> {
-    unimplemented!()
+    // Save input data into Post struct
+    let post: Post = Post(external_data.content);
+
+    // Create entry and get EntryHash
+    create_entry(&post)?;
+    let post_entry_hash: EntryHash = hash_entry(&post)?;
+
+    // Get agent EntryHash
+    let agent_entry_hash: EntryHash = agent_info()?.agent_latest_pubkey.into();
+
+    // Create link between two elements
+    create_link(agent_entry_hash, post_entry_hash.clone(), ())?;
+
+    Ok(post_entry_hash)
 }
 
 //  4. get_posts_for_agent()
@@ -34,5 +47,25 @@ pub fn create_post(external_data: CreatePostInput) -> ExternResult<EntryHash> {
 
 #[hdk_extern]
 pub fn get_posts_for_agent(agent_pubkey: AgentPubKey) -> ExternResult<Vec<Post>> {
-    unimplemented!()
+    let agent_entry_hash: EntryHash = agent_pubkey.into();
+    let links: Links = get_links(agent_entry_hash, None)?;
+
+    let mut posts: Vec<Post> = Vec::new();
+
+    for link in links.into_inner() {
+        posts.push(_get_post_from_link(link)?);
+    }
+
+    Ok(posts)
+}
+
+fn _get_post_from_link(link: Link) -> ExternResult<Post> {
+    let entry_hash: EntryHash = link.target;
+    let element: Element = get(entry_hash, GetOptions::default())?
+        .ok_or(WasmError::Guest(String::from("Error when get Post")))?;
+
+    let post: Post = element.entry().to_app_option()?
+        .ok_or(WasmError::Guest(String::from("No book found")))?;
+
+    Ok(post)
 }
